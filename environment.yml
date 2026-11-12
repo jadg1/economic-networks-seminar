@@ -1,0 +1,22 @@
+# Conda environment for the Economic Networks Fundamentals seminar.
+#   conda env create -f environment.yml
+#   conda activate econ-networks
+#   python check_setup.py
+name: econ-networks
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy
+  - scipy
+  - pandas
+  - networkx>=3.2
+  - matplotlib
+  - requests
+  - jupyterlab
+  - ipywidgets
+  - nbformat
+  - pip
+  - pip:
+      - pyreadr        # reads the Glasgow school data (school_gossip)
+      - pyvis          # interactive view in kg_lab (optional)

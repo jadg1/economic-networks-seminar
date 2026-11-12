@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bank Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap">
+<style>
+  /* Layout: one narrow column, a lock screen that turns into the team's card. */
+  :root{--bg:#f6f7f5;--fg:#111613;--muted:#5d665f;--line:#d7ddd8;--card:#ffffff;--accent:#1e6b3a;--on-accent:#ffffff;--accent-soft:#e3efe7;--warn:#a33a2a;
+    --display:"Space Grotesk",Calibri,Carlito,system-ui,sans-serif;--body:Inter,Calibri,Carlito,system-ui,sans-serif;color-scheme:light}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f1311;--fg:#e9eeea;--muted:#a1aca4;--line:#2b332e;--card:#171d19;--accent:#5fbf84;--on-accent:#0b1a10;--accent-soft:#1d3226;--warn:#ef8a78;color-scheme:dark}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 var(--body);
+    padding:max(18px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left))}
+  main{max-width:520px;margin:0 auto;display:grid;gap:18px}
+  .eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  h1{font:700 30px/1.1 var(--display);margin:2px 0 0;text-wrap:balance}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+  label{font-weight:600;display:block;margin-bottom:8px}
+  input{width:100%;font:500 20px var(--body);padding:12px 14px;border-radius:10px;border:1.5px solid var(--line);background:var(--bg);color:var(--fg)}
+  input:focus,button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  button{font:600 17px var(--body);border:0;border-radius:10px;padding:12px 18px;background:var(--accent);color:var(--on-accent);cursor:pointer;width:100%;margin-top:12px}
+  button.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+  .err{color:var(--warn);font-weight:600;min-height:1.5em;margin-top:8px}
+  .bank{font:700 64px/1 var(--display);color:var(--accent);letter-spacing:-.01em}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .chip{background:var(--accent-soft);color:var(--fg);border-radius:999px;padding:6px 12px;font-weight:600;font-variant-numeric:tabular-nums}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+  .cols h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+  .cols ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+  .cols li{display:flex;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-weight:600;font-variant-numeric:tabular-nums}
+  .role{border-left:4px solid var(--warn);padding:10px 14px;background:var(--bg);border-radius:8px;margin-top:14px}
+  ol{margin:6px 0 0;padding-left:1.2em;display:grid;gap:6px}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th,td{text-align:center;padding:6px 2px;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  .small{font-size:14px;color:var(--muted)}
+  @media (max-width:380px){.cols{grid-template-columns:1fr}}
+</style></head><body>
+<main>
+  <header><div class="eyebrow">Economic Networks Fundamentals · UAM</div><h1>The bank game</h1></header>
+
+  <section class="panel" id="lock">
+    <form id="f" autocomplete="off">
+      <label for="pw">Your team's password</label>
+      <input id="pw" name="pw" type="text" inputmode="text" autocapitalize="none" spellcheck="false" placeholder="word-word-00" required>
+      <button type="submit" id="go">Open my card</button>
+      <div class="err" id="err" role="alert"></div>
+    </form>
+    <p class="small">Only your team sees your card. Keep the password to yourselves.</p>
+  </section>
+
+  <section class="panel" id="cardview" hidden>
+    <div class="eyebrow">Your card · keep it secret</div>
+    <div class="bank" id="bankname"></div>
+    <div class="stats"><span class="chip" id="buffer"></span><span class="chip" id="cash"></span></div>
+    <div class="cols">
+      <div><h2>You lent to</h2><ul id="lent"></ul></div>
+      <div><h2>You borrowed from</h2><ul id="borrowed"></ul></div>
+    </div>
+    <div class="role" id="role" hidden></div>
+    <button class="ghost" id="hide" type="button">Hide card</button>
+  </section>
+
+  <section class="panel">
+    <div class="eyebrow">Rules</div>
+    <ol>
+      <li>If a bank fails, its lenders lose what they lent it. Losses above 2 and that lender fails too.</li>
+      <li>At the start of each round you may pull any loan you made. If more than 2 is pulled from one bank in a round, it fails, and all its lenders lose, including those who just pulled. Cash does not refill.</li>
+      <li>Score: +1 per unit still lent to a surviving bank; 0 for a pulled loan; minus the amount lent to a failed bank; −5 if your bank fails.</li>
+    </ol>
+  </section>
+
+  <section class="panel">
+    <div class="eyebrow">Each round</div>
+    <ol>
+      <li>Listen to the news.</li>
+      <li>Send one person to one bank you are linked to and ask one yes-or-no question. They answer truthfully or say “no comment”.</li>
+      <li>Write on your paper slip which loans you pull, if any, and hand it in.</li>
+    </ol>
+  </section>
+
+  <section class="panel">
+    <div class="eyebrow">The public board: only the totals</div>
+    <div style="overflow-x:auto"><table id="board"></table></div>
+  </section>
+</main>
+<script>
+const DATA = {"salt": "J3bdeVTw3VFR3w8N9h3N7w==", "iter": 150000, "cards": [{"iv": "qypPHeVEEz9kAAlK", "ct": "xn5JN6bON46j+hvpM+FNFZO4zh+9ZE5vJig5h0b7mrmTDH3g+399sMUt71UHIHSEq+hc74zU0QMlLgaZdCfpkBrgEFsLvZwFJeOEiy7pM+g9s0y7kjbffTho/BitRmr4vo/D5IhPkSQvLDqYCJLbGKLCP0gNr1p8FEPzQHETFfTe8mmQa/p9"}, {"iv": "dK2ufL+BnrPf7MF3", "ct": "Ta60vqjxPfYoS/UbW6P7uXtSjxEAe9Zmkq6IsAQC1LtjKUXCfZbH1oMSOePyQ8IPg3Ag60hRcvlwcDDRlMS9SLbb+zVx4jRDA8PVlDedibVkHGJhbbH16wBJJQy+tAr4eZfXT/ltI3RmyYa4k1x6qhnJWCm/CewVaeISYq69oyB0M6smpHEQ"}, {"iv": "TfOga9isTGtWxNQS", "ct": "s/ISpIgyw6NQB8vYX07SJtweRPQYJlm9L0/68xzVKecU9t/oqVhcJG78lkLoYfIpk0C6eONbduoB74b1VyrRjXVne6GTRRvpUkmkl3+TKc85baADZbiMZ1PDDjSN/kshrUaXwKtzj+pkDmSfD05SvHTBIgOiXiNLBESJ8Qo="}, {"iv": "wHGgAKIPLIkz17+7", "ct": "2UGIpbQCQbWv1QrmAzx7R37R5gsQ6/bRuOK2NulQ+laD++lrdMDWCb5Ue+YBVZ8R8kkIbvjsHKooQ2oY3m74gNxxGhz5MdTCCs1f7TsYoZnubn0MO/kO2PogRXTFV688acMT5LzgnVW/x+vrQzA5wc4ri8T5nXLxx4J/GpBGDItgCWJI5lDR"}, {"iv": "LLOEJTKcrtvbwO7q", "ct": "8L5LDi+BuDMpQHP6Cf9RI4UHKcs4R5AmuqkfI0zqrq6bx8CmC/3ptv7QhFCpGOyVmTeJHXPQirnU6mli9UiE8QsQE9bIx0iQyWUj6jVwNCZ+ITAgd3encIf2zSPOVD6f8VpLqLCxQD4Jh31MxRN1oIGLOLracss0HbC1MaL1u97mqYaUtiHT"}, {"iv": "/lbl6EX41Bxg5Vjo", "ct": "2BTfbecBhnbz2YiORbbCXSo+xWjkoTL1XO6xhwdIGh52SMPhJVhFDCP6aA08HevXq2OjHbuNKSiWMXHpgTj1dZAqo7ICj3F4qhbJE4sgppQ90gAueyTDc5d3cjGc2zpa9fA1D6H/QMKbfr7xFLFatDQ9ZVZcph9NLutZG1A/RKXOswfWlZoV"}, {"iv": "/LYG8ivNLPgu3r4u", "ct": "wIDbdL93kiPOLXCOgA5i2moRsQqdv8C/RFVCXud2VhsuAk2k/QwMe3TlDSWHgDWPsrQUJuIrzunLmg3C8A9bDFJsTtn6aWzr81RmscN7BaSdd3p1Kzif9XZp6XzuZhxJgDYo83VUTWbjLwS0p0haobEb2q/okXUdAkhYwA3SkjOPZ+cUKs3wEOA1q9msPbL/yA=="}, {"iv": "hfk0XzSiDRUDJUZk", "ct": "MJAG2vD/e9sh+6NejY0vYtTITw8bxsa0/FjKATLk5FScz4D4WsVPfPTsIErBLzJp5SH4gM9yFKNedSB8aL1i59teEUrNo+CXSKSuWgVzHLf2wmHjOt+35hYHY7Ra0Z7cReh3CfFfgUoxquYLGTNpSK1laMJuMNhdl7gQ0zKCDZOEBm1/is4="}], "board": [["A", 3, 4], ["B", 3, 3], ["C", 3, 1], ["D", 3, 3], ["E", 3, 3], ["F", 3, 3], ["G", 3, 3], ["H", 3, 4]]};
+const $ = id => document.getElementById(id);
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function openCard(password) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(password.trim().toLowerCase()), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({name: "PBKDF2", salt: b64(DATA.salt), iterations: DATA.iter, hash: "SHA-256"},
+                                            base, {name: "AES-GCM", length: 256}, false, ["decrypt"]);
+  for (const c of DATA.cards) {
+    try {
+      const plain = await crypto.subtle.decrypt({name: "AES-GCM", iv: b64(c.iv)}, key, b64(c.ct));
+      return JSON.parse(new TextDecoder().decode(plain));
+    } catch (e) { /* not this team's card */ }
+  }
+  return null;
+}
+function li(name, amount) { const e = document.createElement("li"); e.innerHTML = "<span></span><span></span>"; e.children[0].textContent = "Bank " + name; e.children[1].textContent = amount; return e; }
+function show(c) {
+  $("bankname").textContent = "Bank " + c.bank;
+  $("buffer").textContent = "Buffer " + c.buffer;
+  $("cash").textContent = "Cash " + c.cash;
+  $("lent").replaceChildren(...c.lent.map(([n, v]) => li(n, v)));
+  $("borrowed").replaceChildren(...c.borrowed.map(([n, v]) => li(n, v)));
+  $("role").hidden = !c.shocked;
+  if (c.shocked) $("role").textContent = "Your bank fails at the start of the game. Your team gets a special role: ask the presenter.";
+  $("lock").hidden = true; $("cardview").hidden = false;
+}
+$("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("err").textContent = ""; $("go").disabled = true; $("go").textContent = "Opening…";
+  try {
+    if (!window.crypto || !crypto.subtle) throw new Error("secure");
+    const c = await openCard($("pw").value);
+    if (c) { show(c); try { sessionStorage.setItem("bankpw", $("pw").value); } catch (_) {} }
+    else $("err").textContent = "That password doesn't open any card. Check the spelling and the hyphens.";
+  } catch (err) {
+    $("err").textContent = "This browser can't open the card. Try Chrome or Safari, or ask the presenter.";
+  } finally { $("go").disabled = false; $("go").textContent = "Open my card"; }
+});
+$("hide").addEventListener("click", () => {
+  $("cardview").hidden = true; $("lock").hidden = false; $("pw").value = "";
+  try { sessionStorage.removeItem("bankpw"); } catch (_) {}
+});
+const t = $("board");
+t.innerHTML = "<tr><th></th>" + DATA.board.map(r => "<th>" + r[0] + "</th>").join("") + "</tr>" +
+  "<tr><td>Lent</td>" + DATA.board.map(r => "<td>" + r[1] + "</td>").join("") + "</tr>" +
+  "<tr><td>Borrowed</td>" + DATA.board.map(r => "<td>" + r[2] + "</td>").join("") + "</tr>";
+try { const saved = sessionStorage.getItem("bankpw"); if (saved) { $("pw").value = saved; $("f").requestSubmit(); } } catch (_) {}
+</script>
+</body></html>

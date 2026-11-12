@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+.env
+
+# Data downloaded at run time (not ours to redistribute)
+RSiena.rda
+openalex_cache/
+
+# Outputs the labs write when you run them
+kg_export/
+kg_export.zip
+kg_citations.png
+kg_interactive.html
+cops_robbers_board.html
+*_game.html
+!games/*_game.html
+
+# LaTeX build files
+*.aux
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.vrb
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+missfont.log
+slides/main.pdf
+
+# Node (timetable)
+node_modules/
+package-lock.json
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# =====================================================================
+# NEVER PUBLISH: presenter-only material (answers, truth sheet, cards)
+# =====================================================================
+presenter/
+slides/appendix_cards.tex
+slides/public.*
+# images you add yourself (film stills, logos, your photo): only the READMEs are published
+slides/media/**
+!slides/media/**/
+!slides/media/**/README.md
+
+# =====================================================================
+# HOLD BACK UNTIL AFTER THE SEMINAR (Friday 13 November 2026):
+# these reveal the bank game's hidden network and the answers.
+# After the seminar, delete this block and run:
+#   git add . && git commit -m "Add the bank game labs and slides" && git push
+# =====================================================================
+slides/
+labs/clue_bank_game.py
+labs/clue_bank_game.ipynb
+labs/trust_network.py
+labs/trust_network.ipynb

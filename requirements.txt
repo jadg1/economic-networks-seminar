@@ -1,0 +1,12 @@
+# pip alternative to environment.yml:  pip install -r requirements.txt
+numpy
+scipy
+pandas
+networkx>=3.2
+matplotlib
+requests
+jupyterlab
+ipywidgets
+nbformat
+pyreadr
+pyvis

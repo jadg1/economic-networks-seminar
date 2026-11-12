@@ -1,0 +1,261 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Cops and robbers</title>
+<style>
+  body{font-family:Calibri,Carlito,'Segoe UI',Arial,sans-serif;margin:0;padding:10px;background:#fff;color:#111}
+  #wrap{display:flex;gap:14px;flex-wrap:wrap;outline:none}
+  #wrap:focus #board{box-shadow:0 0 0 3px #1E6B3A55}
+  #board{border:1px solid #ddd;border-radius:8px;background:#fafafa;max-width:100%;height:auto}
+  h1{font-size:19px;color:#1E6B3A;margin:0 0 6px}
+  #side{width:290px;font-size:14px}
+  #status{font-size:16px;font-weight:bold;margin:6px 0;min-height:44px}
+  #theory{color:#555;font-size:13px;margin:6px 0}
+  #log{height:160px;overflow:auto;white-space:pre-wrap;font-family:Consolas,monospace;font-size:12px;background:#f4f4f4;padding:6px;border-radius:6px}
+  .keys{color:#555;font-size:13px;margin:6px 0}
+  kbd{border:1px solid #bbb;border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:12px;background:#fff}
+  button{font:inherit;padding:4px 10px;margin:4px 4px 0 0;border:1px solid #1E6B3A;background:#fff;color:#1E6B3A;border-radius:6px;cursor:pointer}
+  .piece{transition:transform .35s ease}
+  .edge{stroke:#999;stroke-width:2}
+  .node{fill:#fff;stroke:#333;stroke-width:1.5;cursor:pointer}
+  .node.target{stroke:#1E6B3A;stroke-width:3.5}
+  .lab{font-size:13px;font-weight:bold;text-anchor:middle;pointer-events:none}
+  .hint{font-size:12px;font-weight:bold;fill:#1E6B3A;text-anchor:middle;pointer-events:none}
+</style></head><body>
+<div id="wrap" tabindex="0">
+  <svg id="board" width="620" height="440" viewBox="0 0 620 440"></svg>
+  <div id="side">
+    <h1 id="title"></h1>
+    <div id="status"></div>
+    <div class="keys"><b>Click the board first</b>, then: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys to move along a link,
+      <kbd>Space</kbd> to stay, or click a neighbouring node. <kbd>R</kbd> restarts. The green letters show where each key takes you.</div>
+    <div id="theory"></div>
+    <button id="restart">Restart (R)</button><button id="pause" style="display:none">Pause</button>
+    <div style="margin-top:8px;font-weight:bold">Move log</div>
+    <div id="log"></div>
+  </div>
+</div>
+<script>
+const G = {"name": "Square (Round 1)", "nodes": ["A", "B", "C", "D"], "xy": [[138.0, 48.0], [482.0, 48.0], [482.0, 392.0], [138.0, 392.0]], "edges": [[0, 1], [0, 3], [1, 2], [2, 3]], "closed": [[0, 1, 3], [0, 1, 2], [1, 2, 3], [0, 2, 3]], "D": [[0, 1, 2, 1], [1, 0, 1, 2], [2, 1, 0, 1], [1, 2, 1, 0]], "deg": [2, 2, 2, 2], "k_cops": 1, "k_robbers": 1, "mode": "robber", "ai": "smart", "max_rounds": 8, "corners": [], "show_corners": false, "theory": "With perfect play, 1 cop cannot always win on this network. No way to cross out every corner: one cop cannot always win.", "cop_start": [1], "table": {"states": ["0", "1", "2", "3"], "Vc": [[0, 1, -1, 1], [1, 0, 1, -1], [-1, 1, 0, 1], [1, -1, 1, 0]], "Vr": [[0, -1, -1, -1], [-1, 0, -1, -1], [-1, -1, 0, -1], [-1, -1, -1, 0]]}};
+const n = G.nodes.length, NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("board"), wrap = document.getElementById("wrap");
+const COP = "#1E6B3A", ROB = "#C0392B";
+let S;                                   // game state
+const idxOf = new Map();
+if (G.table) G.table.states.forEach((k, i) => idxOf.set(k, i));
+const keyOf = cops => [...cops].sort((a, b) => a - b).join(",");
+const rand = arr => arr[Math.floor(Math.random() * arr.length)];
+const humanTeam = () => G.mode === "robber" ? "robbers" : G.mode === "cop" ? "cops" : G.mode === "two players" ? S.turn : null;
+
+// ---------- computer players (same rules as the Python Brain) ----------
+function copMoves(cops, robbers) {
+  const live = robbers.filter(r => r !== null);
+  if (G.ai === "random") return cops.map(c => rand(G.closed[c]));
+  if (G.ai === "smart" && G.table && live.length === 1) {
+    const r = live[0]; let best = Infinity, opts = [];
+    const prod = cops.reduce((acc, c) => acc.flatMap(p => G.closed[c].map(x => [...p, x])), [[]]);
+    for (const m of prod) {
+      let v = m.includes(r) ? 0 : G.table.Vr[idxOf.get(keyOf(m))][r];
+      if (v < 0) v = 1e9;
+      if (v < best) { best = v; opts = [m]; } else if (v === best) opts.push(m);
+    }
+    return rand(opts);
+  }
+  const out = [];
+  for (const c of cops) {
+    const target = live.reduce((a, b) => (G.D[c][b] < G.D[c][a] ? b : a));
+    let cand = G.closed[c];
+    if (cand.includes(target)) { out.push(target); continue; }
+    const d = Math.min(...cand.map(x => G.D[x][target]));
+    cand = cand.filter(x => G.D[x][target] === d);
+    if (out.length) {
+      const sep = x => Math.min(...out.map(y => G.D[x][y]));
+      const far = Math.max(...cand.map(sep));
+      cand = cand.filter(x => sep(x) === far);
+    }
+    out.push(rand(cand));
+  }
+  return out;
+}
+function robberMove(r, cops, taken = []) {
+  let cand = G.closed[r].filter(x => !cops.includes(x));
+  const spread = cand.filter(x => !taken.includes(x));
+  if (spread.length) cand = spread;
+  if (!cand.length) cand = [r];
+  if (G.ai === "random") return rand(cand);
+  if (G.ai === "smart" && G.table) {
+    const s = idxOf.get(keyOf(cops)), val = x => { const v = G.table.Vc[s][x]; return v < 0 ? 1e9 : v; };
+    const best = Math.max(...cand.map(val)); cand = cand.filter(x => val(x) === best);
+  }
+  const key = x => { const m = Math.min(...cops.map(c => G.D[c][x])); return [m > 1 ? 1 : 0, m, G.deg[x]]; };
+  const cmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+  const top = cand.map(key).reduce((a, b) => (cmp(a, b) >= 0 ? a : b));
+  return rand(cand.filter(x => cmp(key(x), top) === 0));
+}
+function robberStart(cops, taken = []) {
+  let free = [...Array(n).keys()].filter(v => !cops.includes(v) && !taken.includes(v));
+  if (!free.length) free = [...Array(n).keys()].filter(v => !cops.includes(v));
+  if (G.ai === "random") return rand(free);
+  if (G.ai === "smart" && G.table) {
+    const s = idxOf.get(keyOf(cops)), val = x => { const v = G.table.Vc[s][x]; return v < 0 ? 1e9 : v; };
+    const best = Math.max(...free.map(val)); free = free.filter(x => val(x) === best);
+  }
+  const key = v => Math.min(...cops.map(c => G.D[c][v])) * 100 + G.deg[v];
+  const top = Math.max(...free.map(key));
+  return rand(free.filter(v => key(v) === top));
+}
+
+// ---------- drawing ----------
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || svg).appendChild(e); return e; }
+function draw() {
+  svg.innerHTML = "";
+  for (const [a, b] of G.edges) el("line", {x1: G.xy[a][0], y1: G.xy[a][1], x2: G.xy[b][0], y2: G.xy[b][1], class: "edge"});
+  const hints = hintMap();
+  for (let v = 0; v < n; v++) {
+    const [x, y] = G.xy[v];
+    const c = el("circle", {cx: x, cy: y, r: 17, class: "node" + (Object.values(hints).includes(v) ? " target" : "")});
+    c.addEventListener("click", () => clickNode(v));
+    if (G.show_corners && G.corners.includes(v)) el("path", {d: `M${x + 13} ${y - 22} l7 12 h-14 z`, fill: "#C9A227"});
+    el("text", {x, y: y + 5, class: "lab"}).textContent = G.nodes[v];
+  }
+  for (const [k, v] of Object.entries(hints)) {
+    if (v === undefined) continue;
+    const [x, y] = G.xy[v]; el("text", {x: x, y: y - 22, class: "hint"}).textContent = k;
+  }
+  const count = {}, at = {};
+  [...S.cops, ...S.robbers].forEach(v => { if (v !== null) count[v] = (count[v] || 0) + 1; });
+  const put = (v, color, txt, active) => {
+    const k = (at[v] = (at[v] || 0) + 1) - 1, m = count[v];
+    const ang = 2 * Math.PI * k / m, rad = m > 1 ? 10 : 0, dx = rad * Math.cos(ang), dy = rad * Math.sin(ang);
+    const g = el("g", {class: "piece", transform: `translate(${G.xy[v][0] + dx},${G.xy[v][1] + dy})`});
+    el("circle", {r: active ? 13 : 11, fill: color, stroke: active ? "#000" : "#fff", "stroke-width": active ? 3 : 2}, g);
+    const t = el("text", {y: 4, fill: "#fff", "font-size": 11, "font-weight": "bold", "text-anchor": "middle"}, g); t.textContent = txt;
+  };
+  S.cops.forEach((v, i) => v !== null && put(v, COP, "C" + (i + 1), S.turn === "cops" && S.active === i && S.phase === "play" && humanTeam() === "cops"));
+  S.robbers.forEach((v, i) => v !== null && put(v, ROB, "R" + (i + 1), S.turn === "robbers" && S.active === i && S.phase === "play" && humanTeam() === "robbers"));
+  document.getElementById("status").innerHTML = S.msg;
+}
+function hintMap() {
+  if (S.phase !== "play" || humanTeam() !== S.turn) return {};
+  const v = S.turn === "cops" ? S.cops[S.active] : S.robbers[S.active];
+  if (v === null || v === undefined) return {};
+  const out = {};
+  for (const [k, dir] of Object.entries({W: [0, -1], A: [-1, 0], S: [0, 1], D: [1, 0]})) out[k] = neighbourInDir(v, dir);
+  return out;
+}
+function neighbourInDir(v, [dx, dy]) {
+  let best, bestCos = 0.35;
+  for (const u of G.closed[v]) {
+    if (u === v) continue;
+    const ex = G.xy[u][0] - G.xy[v][0], ey = G.xy[u][1] - G.xy[v][1], len = Math.hypot(ex, ey) || 1;
+    const cos = (ex * dx + ey * dy) / len;
+    if (cos > bestCos) { bestCos = cos; best = u; }
+  }
+  return best;
+}
+function log(s) { const L = document.getElementById("log"); L.textContent += s + "\n"; L.scrollTop = 1e9; }
+const name = v => G.nodes[v];
+
+// ---------- game flow ----------
+function reset() {
+  S = {phase: "place", turn: "cops", active: 0, round: 0, cops: [], robbers: [], pending: [], msg: "", timer: null};
+  document.getElementById("log").textContent = "";
+  document.getElementById("title").textContent = G.name;
+  document.getElementById("theory").textContent = G.theory;
+  document.getElementById("pause").style.display = G.mode === "watch" ? "inline-block" : "none";
+  placeNext();
+}
+function placeNext() {
+  const copsHuman = G.mode === "cop" || G.mode === "two players";
+  const robHuman = G.mode === "robber" || G.mode === "two players";
+  if (S.cops.length < G.k_cops) {
+    if (copsHuman) { S.msg = `Cops: click a node to place cop ${S.cops.length + 1}.`; return draw(); }
+    S.cops = G.cop_start.slice(0, G.k_cops); log("Cops start at " + S.cops.map(name).join(", "));
+  }
+  if (S.robbers.length < G.k_robbers) {
+    if (robHuman) { S.msg = `Robbers: click a node to place robber ${S.robbers.length + 1}.`; return draw(); }
+    while (S.robbers.length < G.k_robbers) S.robbers.push(robberStart(S.cops, S.robbers));
+    log("Robbers start at " + S.robbers.map(name).join(", "));
+  }
+  S.phase = "play"; S.turn = "cops"; S.round = 1; S.active = 0; nextTurn();
+}
+function clickNode(v) {
+  wrap.focus();
+  if (S.phase === "place") {
+    const copsHuman = G.mode === "cop" || G.mode === "two players";
+    if (S.cops.length < G.k_cops && copsHuman) { S.cops.push(v); log(`Cop ${S.cops.length} starts at ${name(v)}`); }
+    else if (S.robbers.length < G.k_robbers) {
+      if (S.cops.includes(v)) { S.msg = "A cop is there: pick another node."; return draw(); }
+      S.robbers.push(v); log(`Robber ${S.robbers.length} starts at ${name(v)}`);
+    }
+    return placeNext();
+  }
+  if (S.phase !== "play" || humanTeam() !== S.turn) return;
+  const cur = S.turn === "cops" ? S.cops[S.active] : S.robbers[S.active];
+  if (G.closed[cur].includes(v)) humanMove(v);
+}
+function nextTurn() {
+  if (S.phase !== "play") return;
+  const team = S.turn === "cops" ? S.cops : S.robbers;
+  while (S.active < team.length && team[S.active] === null) S.active++;
+  if (S.active >= team.length) return endTeam();
+  if (humanTeam() === S.turn) {
+    const who = S.turn === "cops" ? `cop C${S.active + 1}` : `robber R${S.active + 1}`;
+    S.msg = `Round ${S.round}: your move, ${who}.`; draw();
+  } else {
+    S.msg = `Round ${S.round}: the ${S.turn} are thinking…`; draw();
+    S.timer = setTimeout(computerTeam, G.mode === "watch" ? 700 : 450);
+  }
+}
+function computerTeam() {
+  if (S.phase !== "play") return;
+  if (S.turn === "cops") {
+    const before = S.cops.slice(); S.cops = copMoves(S.cops, S.robbers);
+    log(`R${S.round} cops: ` + before.map((v, i) => `${name(v)}→${name(S.cops[i])}`).join(", "));
+  } else {
+    const before = S.robbers.slice();
+    const moved = [];
+    S.robbers = S.robbers.map(r => { if (r === null) return null; const x = robberMove(r, S.cops, moved); moved.push(x); return x; });
+    log(`R${S.round} robbers: ` + before.map((v, i) => (v === null ? "caught" : `${name(v)}→${name(S.robbers[i])}`)).join(", "));
+  }
+  S.active = 1e9; endTeam();
+}
+function humanMove(v) {
+  if (S.turn === "cops") { log(`R${S.round} C${S.active + 1}: ${name(S.cops[S.active])}→${name(v)}`); S.cops[S.active] = v; }
+  else { log(`R${S.round} R${S.active + 1}: ${name(S.robbers[S.active])}→${name(v)}`); S.robbers[S.active] = v; }
+  S.active++; captures(); if (S.phase === "play") nextTurn();
+}
+function captures() {
+  S.robbers = S.robbers.map((r, i) => { if (r !== null && S.cops.includes(r)) { log(`  R${i + 1} caught at ${name(r)}!`); return null; } return r; });
+  if (S.robbers.every(r => r === null)) {
+    S.phase = "over"; S.msg = `<span style="color:${COP}">Cops win in round ${S.round}.</span>`; draw(); return true;
+  }
+  return false;
+}
+function endTeam() {
+  if (captures()) return;
+  if (S.turn === "cops") { S.turn = "robbers"; S.active = 0; return nextTurn(); }
+  if (S.round >= G.max_rounds) {
+    S.phase = "over"; S.msg = `<span style="color:${ROB}">Robbers win: still free after ${G.max_rounds} rounds.</span>`; return draw();
+  }
+  S.round++; S.turn = "cops"; S.active = 0; nextTurn();
+}
+wrap.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === "r") { clearTimeout(S.timer); return reset(); }
+  if (S.phase !== "play" || humanTeam() !== S.turn) return;
+  const dirs = {w: [0, -1], arrowup: [0, -1], a: [-1, 0], arrowleft: [-1, 0], s: [0, 1], arrowdown: [0, 1], d: [1, 0], arrowright: [1, 0]};
+  const cur = S.turn === "cops" ? S.cops[S.active] : S.robbers[S.active];
+  if (k === " " || k === "spacebar" || k === "x") { e.preventDefault(); return humanMove(cur); }
+  if (dirs[k]) {
+    e.preventDefault();
+    const u = neighbourInDir(cur, dirs[k]);
+    if (u === undefined) { S.msg = "No link in that direction: try another key, or click a neighbour."; return draw(); }
+    humanMove(u);
+  }
+});
+document.getElementById("restart").onclick = () => { clearTimeout(S.timer); reset(); wrap.focus(); };
+document.getElementById("pause").onclick = e => {
+  if (S.phase === "play") { S.phase = "paused"; clearTimeout(S.timer); e.target.textContent = "Resume"; }
+  else if (S.phase === "paused") { S.phase = "play"; e.target.textContent = "Pause"; nextTurn(); }
+};
+reset(); wrap.focus();
+</script></body></html>

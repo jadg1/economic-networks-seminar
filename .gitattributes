@@ -1,0 +1,12 @@
+# Normalise line endings so Windows, macOS and Linux see the same files
+* text=auto eol=lf
+*.bat text eol=crlf
+
+# Binary files: never touch
+*.png binary
+*.jpg binary
+*.gif binary
+*.pdf binary
+*.pptx binary
+*.rda binary
+*.zip binary
